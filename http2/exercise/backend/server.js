@@ -34,7 +34,34 @@ const server = http2.createSecureServer({
  * Code goes here
  *
  */
+server.on("stream", (stream, headers) => {
+  const path = headers[":path"];
+  const method = headers[":method"];
 
+  if (path === "/msgs" && method === "GET") {
+    console.log("Connected to stream : ", stream.id);
+
+    stream.respond({
+      ":status": 200,
+      "content-type": "text/plain; charset=utf-8",
+    });
+
+    stream.write(
+      JSON.stringify({
+        msg: getMsgs(),
+      })
+    );
+
+    connections.push(stream);
+
+    stream.on("close", () => {
+      connections = connections.filter(s => s !== stream);
+      console.log("Disconnected");
+    });
+  }
+});
+
+// similar to http 1.1 style request
 server.on("request", async (req, res) => {
   const path = req.headers[":path"];
   const method = req.headers[":method"];
@@ -47,17 +74,22 @@ server.on("request", async (req, res) => {
   } else if (method === "POST") {
     // get data out of post
     const buffers = [];
+console.log('req ', req);
     for await (const chunk of req) {
+      console.log('server chunk ', chunk);
       buffers.push(chunk);
     }
     const data = Buffer.concat(buffers).toString();
     const { user, text } = JSON.parse(data);
 
-    /*
-     *
-     * some code goes here
-     *
-     */
+    msg.push({
+      user, text, time: Date.now()
+    });
+
+    res.end();
+    connections.forEach((stream) => {
+      stream.write(JSON.stringify({msg: getMsgs()}));
+    })
   }
 });
 
